@@ -308,9 +308,12 @@ if args.bloodhound_enabled:
                 node["owned"]=True # Legacy field
                 
                 # Handle system_tags for owned status
-                if not node["system_tags"]:
+                if node["system_tags"] and "owned" in node["system_tags"]:
+                    # Skip if already owned
+                    pass
+                elif not node["system_tags"]:
                     node["system_tags"] = "owned"
-                elif "owned" not in node["system_tags"]:
+                else:
                     node["system_tags"] += " owned"
                 
                 # Commit the changes to the database
@@ -324,9 +327,12 @@ if args.bloodhound_enabled:
                     node["owned"]=True # Legacy field
                     
                     # Handle system_tags for owned status
-                    if not node["system_tags"]:
+                    if node["system_tags"] and "owned" in node["system_tags"]:
+                        # Skip if already owned
+                        pass
+                    elif not node["system_tags"]:
                         node["system_tags"] = "owned"
-                    elif "owned" not in node["system_tags"]:
+                    else:
                         node["system_tags"] += " owned"
 
                     # Commit the changes to the database
