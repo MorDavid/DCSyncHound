@@ -299,23 +299,35 @@ if (args.output_file):
 if args.bloodhound_enabled:
     for user_object in tqdm(final_result,desc="Updating Plaintexts to Bloodhound"):
         try:
-            node=matcher.match("User", name=user_object["User"].upper()+"@"+user_object["Domain"].upper()).first()
+            node = matcher.match("User", name=user_object["User"].upper()+"@"+user_object["Domain"].upper()).first()
             
             if node:
                 # Add parameters "Password" and "NTLM"
-                node["password"]=user_object["Plaintext"]
-                node["ntlm"]=user_object["NTLM"]
-                node["owned"]=True
+                node["password"] = user_object["Plaintext"]
+                node["ntlm"] = user_object["NTLM"]
+                node["owned"]=True # Legacy field
+                
+                # Handle system_tags for owned status
+                if not node["system_tags"]:
+                    node["system_tags"] = "owned"
+                elif "owned" not in node["system_tags"]:
+                    node["system_tags"] += " owned"
                 
                 # Commit the changes to the database
                 graph.push(node)
             else:
-                node=matcher.match("User", name=user_object["User"].upper()+"@"+(args.domain).upper()).first()
+                node = matcher.match("User", name=user_object["User"].upper()+"@"+(args.domain).upper()).first()
                 if node:
                     # Add parameters "Password" and "NTLM"
-                    node["password"]=user_object["Plaintext"]
-                    node["ntlm"]=user_object["NTLM"]
-                    node["owned"]=True
+                    node["password"] = user_object["Plaintext"]
+                    node["ntlm"] = user_object["NTLM"]
+                    node["owned"]=True # Legacy field
+                    
+                    # Handle system_tags for owned status
+                    if not node["system_tags"]:
+                        node["system_tags"] = "owned"
+                    elif "owned" not in node["system_tags"]:
+                        node["system_tags"] += " owned"
 
                     # Commit the changes to the database
                     graph.push(node)
