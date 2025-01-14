@@ -106,27 +106,29 @@ if dcsync_type == "secretsdump":
     dcsync=load_file(args.file_load)
     for dcsync_row in dcsync:
         try:
-            regex_me=r"^(.*?)\:\d+\:.*?\:(.*?)\:" # DCsync (Secretdump)
+            regex_me=r"^(.*?)\:(\d+)\:.*?\:(.*?)\:" # DCsync (Secretdump)
             if("(status=" in dcsync_row):
-                regex_me=r"^(.*?)\:\d+\:.*?\:(.*?)\:.*?\(status\=(.*?)\)"
+                regex_me=r"^(.*?)\:(\d+)\:.*?\:(.*?)\:.*?\(status\=(.*?)\)"
             dcsync_list=list(re.findall(regex_me, dcsync_row)[0])
             if ("\\" in dcsync_list[0]):
                 domain=dcsync_list[0].split("\\")[0]
+                user_id=dcsync_list[1]
                 user=dcsync_list[0].split("\\")[1]
-                ntlm=dcsync_list[1].upper()
+                ntlm=dcsync_list[2].upper()
             else:
                 domain=args.domain.lower()
+                user_id=dcsync_list[1]
                 user=dcsync_list[0]
-                ntlm=dcsync_list[1].upper()
+                ntlm=dcsync_list[2].upper()
             try:
-                enabled=dcsync_list[2]
+                enabled=dcsync_list[3]
             except:
                 enabled=""
 
             if(user == domain):
                 domain=(args.domain).upper()
 
-            adding_dict=dict(domain=domain, user=user, ntlm=ntlm, enabled=enabled)
+            adding_dict=dict(domain=domain, user_id=user_id, user=user, ntlm=ntlm, enabled=enabled)
             logger.debug(adding_dict)
             dcsync_final.append(adding_dict)
         except Exception as e:
@@ -151,7 +153,7 @@ if dcsync_type == "mimikatz":
                 enabled="Enabled"
             else:
                 enabled="Disabled"
-            adding_dict=dict(domain=domain, user=user, ntlm=ntlm, enabled=enabled)
+            adding_dict=dict(domain=domain, user_id="", user=user, ntlm=ntlm, enabled=enabled)
             dcsync_final.append(adding_dict)
 if dcsync_type == "sharpkatz":
     regex_me=r"^.*\s+(.*?)\s+([a-z0-9]{32})\s+(.*)$" # DCsync (SharpKatz)
@@ -168,7 +170,7 @@ if dcsync_type == "sharpkatz":
                 enabled="Enabled" 
             else:
                 enabled="Disabled"
-            adding_dict=dict(domain=domain, user=user, ntlm=ntlm, enabled=enabled)
+            adding_dict=dict(domain=domain, user_id="", user=user, ntlm=ntlm, enabled=enabled)
             logger.debug(adding_dict)
             dcsync_final.append(adding_dict)
 
@@ -176,13 +178,17 @@ if dcsync_type == "sharpkatz":
 logger.info("[+] Creating full table in the memory")
 final_result=list()
 for row in tqdm(dcsync_final,desc="NTLM"):
-    if args.bloodhound_enabled:        
-        node=matcher.match("User", name=row["user"].upper()+"@"+row["domain"].upper()).first()
+    if args.bloodhound_enabled:
+        query = "MATCH (u:User) WHERE last(split(u.objectid, '-')) CONTAINS $objectid AND u.name contains '@"+(row["domain"]).upper()+"' RETURN u LIMIT 1"
+        node = graph.evaluate(query, objectid=row["user_id"])
+        #node=matcher.match("User", name=row["user"].upper()+"@"+row["domain"].upper()).first()
         if node:
             node["ntlm"]=row["ntlm"]
             graph.push(node)
         else:
-            node=matcher.match("User", name=row["user"].upper()+"@"+(args.domain).upper()).first()
+            query = "MATCH (u:User) WHERE last(split(u.objectid, '-')) CONTAINS $objectid AND u.name contains '@"+(args.domain).upper()+"' RETURN u LIMIT 1"
+            node = graph.evaluate(query, objectid=row["user_id"])
+            #node=matcher.match("User", name=row["user"].upper()+"@"+(args.domain).upper()).first()
             if node:
                 node["ntlm"]=row["ntlm"]
                 graph.push(node)
@@ -190,7 +196,7 @@ for row in tqdm(dcsync_final,desc="NTLM"):
                 logger.debug("Not found user named "+row["user"]+"@"+row["domain"]+", or "+row["user"]+"@"+(args.domain).upper())
     for row_cracked in dcsync_cracked_final:
             if(row_cracked["ntlm"] == row["ntlm"]):
-                final_row=dict(Domain=row["domain"], User=row["user"], Plaintext=row_cracked["plaintext"], NTLM=row["ntlm"], Enabled=row["enabled"])
+                final_row=dict(Domain=row["domain"], User_ID=row["user_id"], User=row["user"], Plaintext=row_cracked["plaintext"], NTLM=row["ntlm"], Enabled=row["enabled"])
                 final_result.append(final_row)
     
 
@@ -238,7 +244,7 @@ if (args.output_file):
     
     # Headers
     worksheet.freeze_panes(1, 0) # Freeze the header row
-    headers=['Domain','User','Plaintext','NTLM','Enabled']
+    headers=['Domain','User_ID','User','Plaintext','NTLM','Enabled']
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, bold_format)
     # Add autofilter to the header row
@@ -290,8 +296,6 @@ if (args.output_file):
 
     workbook.close()
     logger.info("[+] Done to create Excel file ("+args.output_file+".xlsx)")
-
-    
     #for user_object in tqdm(dcsync_cracked_final,desc="Updating NTLMs to Bloodhound"):
         #print(user_object)
 
@@ -299,8 +303,9 @@ if (args.output_file):
 if args.bloodhound_enabled:
     for user_object in tqdm(final_result,desc="Updating Plaintexts to Bloodhound"):
         try:
-            node = matcher.match("User", name=user_object["User"].upper()+"@"+user_object["Domain"].upper()).first()
-            
+            query = "MATCH (u:User) WHERE last(split(u.objectid, '-')) CONTAINS $objectid AND u.name contains '@"+(user_object["Domain"]).upper()+"' RETURN u LIMIT 1"
+            node = graph.evaluate(query, objectid=user_object["User_ID"])
+            #node = matcher.match("User", name=user_object["User"].upper()+"@"+user_object["Domain"].upper()).first()
             if node:
                 # Add parameters "Password" and "NTLM"
                 node["password"] = user_object["Plaintext"]
@@ -319,7 +324,9 @@ if args.bloodhound_enabled:
                 # Commit the changes to the database
                 graph.push(node)
             else:
-                node = matcher.match("User", name=user_object["User"].upper()+"@"+(args.domain).upper()).first()
+                query = "MATCH (u:User) WHERE last(split(u.objectid, '-')) CONTAINS $objectid AND u.name contains '@"+(args.domain).upper()+"' RETURN u LIMIT 1"
+                node = graph.evaluate(query, objectid=user_object["User_ID"])
+                #node = matcher.match("User", name=user_object["User"].upper()+"@"+(args.domain).upper()).first()
                 if node:
                     # Add parameters "Password" and "NTLM"
                     node["password"] = user_object["Plaintext"]
