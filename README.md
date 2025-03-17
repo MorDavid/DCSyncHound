@@ -1,4 +1,8 @@
 # DCSyncHound
+
+## Stay Updated on Telegram (RootSec - Cyber Write ups & Tools)
+[https://t.me/root_sec](https://t.me/root_sec)
+
 DCSyncHound is a cyber-security tool designed to assist in protecting your Active Directory environment against potential threats and unauthorized access.\
 This script analyzes the DCSync output file from several tools (such as Mimikatz, Secretsdump and SharpKatz...) and Hashcat's results and combine them into a single Excel file (xlsx) and load the details to your bloodhound.\
 \
